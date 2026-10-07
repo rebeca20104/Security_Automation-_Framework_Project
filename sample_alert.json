@@ -1,0 +1,20 @@
+{
+    "timestamp": "2026-09-28T10:00:00+05:30",
+    "alert_id": "ALERT-001",
+    "severity": "medium",
+    "rule": {
+        "id": "100002",
+        "level": 7,
+        "description": "Suspicious outbound domain event"
+    },
+    "agent": {
+        "id": "001",
+        "name": "lab-agent"
+    },
+    "indicators": [
+        {
+            "type": "domain",
+            "value": "example.com"
+        }
+    ]
+}
