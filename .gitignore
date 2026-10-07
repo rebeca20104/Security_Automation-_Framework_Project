@@ -1,0 +1,9 @@
+.env
+*.db
+*.log
+__pycache__/
+*.pyc
+*.pem
+*.zip
+output/*
+!output/.gitkeep
