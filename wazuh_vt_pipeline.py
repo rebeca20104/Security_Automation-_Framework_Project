@@ -236,13 +236,13 @@ def notify_discord(alert, indicator, itype, mal, sus):
 
 def notify_alert(db, alert):
     """Tier-2 generic card: level gate + auth aggregation + temp-file skip, all logged."""
-    r = alert["rule"]
+    r = alert.get("rule", {})
     agent = alert.get("agent", {}).get("name", "n/a")
     path = alert.get("syscheck", {}).get("path", "")
     if _skip_path(path):
         log.info("Tier-3 skip noisy path %s", path)
         return False
-    rid, level = str(r["id"]), int(r["level"])
+    rid, level = str(r.get("id", "?")), int(r.get("level") or 0)
     floor = GENERIC_MIN_LEVEL if NOTIFY_LEVEL == 1 else max(NOTIFY_LEVEL, GENERIC_MIN_LEVEL)
     if rid in AUTH_RULES:
         if not _cooldown_ok(db, f"auth:{agent}:{rid}", AUTH_COOLDOWN):
@@ -257,7 +257,7 @@ def notify_alert(db, alert):
         log.info("Tier-2 generic cooldown suppress (%s rule %s)", agent, rid)
         return False
     embed = {
-        "title": f"Wazuh alert L{level} — {r['description'][:80]}",
+        "title": f"Wazuh alert L{level} — {r.get('description', '')[:80]}",
         "color": 0xF39C12,
         "fields": [
             {"name": "Scope", "value": f"{agent} · Rule {rid} (L{level})", "inline": False},
@@ -276,10 +276,11 @@ def process(db, alert):
     if db.execute("SELECT 1 FROM alerts WHERE id=?", (aid,)).fetchone():
         return  # already handled
 
+    rule = alert.get("rule", {})
     db.execute(
         "INSERT INTO alerts VALUES (?,?,?,?,?,?,?)",
         (aid, alert["timestamp"], alert.get("agent", {}).get("name"),
-         alert["rule"]["id"], alert["rule"]["level"], alert["rule"]["description"],
+         rule.get("id"), rule.get("level"), rule.get("description"),
          alert.get("syscheck", {}).get("path")),
     )
 
@@ -288,7 +289,7 @@ def process(db, alert):
     indicators = extract_indicators(alert)
     if not indicators:
         log.info("Alert rule %s (level %s): no hash/public IP, VirusTotal not used",
-                 alert["rule"]["id"], alert["rule"]["level"])
+                 rule.get("id"), rule.get("level"))
     for indicator, itype in indicators:
         if _skip_path(alert.get("syscheck", {}).get("path", "")):
             log.info("Tier-3 skip noisy path indicator %s", indicator)
@@ -327,7 +328,11 @@ def main():
         try:
             alerts = fetch_alerts(since)
             for a in alerts:
-                process(db, a)
+                try:
+                    process(db, a)
+                except Exception:
+                    # One poison alert must never wedge the cursor; skip it loudly.
+                    log.exception("Skipping alert %s", a.get("_id", "?"))
             if alerts:
                 since = alerts[-1]["timestamp"]
                 set_state(db, "last_ts", since)
